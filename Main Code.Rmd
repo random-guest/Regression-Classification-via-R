@@ -1,0 +1,578 @@
+---
+title: "Final Project"
+author: "Abdulkarim Atrash"
+date: "2/4/2022"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+### PART I: Main Problem: Regression on Median House Value
+
+## Step 1: Clean and prepare the data set
+
+# Remove all variables from Global Environment
+```{r}
+rm(list = ls())
+```
+
+# Load some libraries
+```{r}
+library (dplyr)
+library(janitor)
+library (caTools)
+library(qpcR)
+library (MASS)
+library(glmnet)
+library(ISLR)
+library(leaps)
+library (pls)
+library(gam)
+library(tree)
+library(randomForest)
+library(gbm)
+library(class)
+library(stats)
+library(naivebayes)
+set.seed(557) 
+```
+
+#  Read the the data
+```{r}
+mydata <- read.csv('california houses.csv',header = TRUE)
+```
+
+# View the data
+```{r}
+head(mydata)
+```
+
+# Summary of data
+```{r}
+summary(mydata)
+```
+
+# clean the data
+```{r}
+mydata <- mydata[complete.cases(mydata), ]
+any(is.na(mydata))
+any(is.null(mydata))
+```
+
+# find out how many category do we have in ocean_proximity
+```{r}
+categories <- unique(mydata$ocean_proximity) 
+categories
+```
+
+# Convert the Quantitative variable (ocean_proximity) into qualitative one
+```{r}
+mydata$ocean_proximity[mydata$ocean_proximity == 'NEAR BAY'] <- 1
+mydata$ocean_proximity[mydata$ocean_proximity == 'NEAR OCEAN'] <- 2
+mydata$ocean_proximity[mydata$ocean_proximity == 'INLAND'] <- 3
+mydata$ocean_proximity[mydata$ocean_proximity == '<1H OCEAN'] <- 4
+mydata$ocean_proximity[mydata$ocean_proximity == 'ISLAND'] <- 5
+mydata$ocean_proximity <- as.numeric(mydata$ocean_proximity)
+```
+
+
+
+################################################################################
+################################################################################
+
+
+
+## Step 2: Split the data set into train and test sets. 80% train, 20% test
+
+```{r}
+split <- sample.split(mydata$median_house_value, SplitRatio = 0.8)
+Train_Data <- subset(mydata, split == TRUE)
+Test_Data  <- subset(mydata, split == FALSE)
+```
+
+######################################################################################################################################################
+
+## Step 3: Apply Different Regression Models:
+
+
+* Apply Ridge, Lasso, and Elastic Net regression. (use Cv to find lamba)
+
+* Apply the best subset selection method to find the most important features, then use them to construct a linear regression model using the least squared technique.
+
+* Apply Principle component regression and Partial Least Squared Regression.
+
+* Apply Generalized Additive Models (GAM)
+
+* Decision Trees 
+  * Apply Regression tree model, with and without CV, then use prunning.
+  * Apply Random Forest Technique
+  * Apply Boosting Technique.
+
+######################################################################################################################################################
+
+# Shrinkage Methods
+
+# Ridge Regression :
+In Ridge regression, we add a penalty term which is equal to the square of the coefficient. The L2 term is equal to the square of the magnitude of the coefficients. We also add a coefficient  \lambda  to control that penalty term. In this case if  \lambda  is zero then the equation is the basic OLS else if  \lambda \, > \, 0 then it will add a constraint to the coefficient. As we increase the value of \lambda this constraint causes the value of the coefficient to tend towards zero. This leads to both low variance (as some coefficient leads to negligible effect on prediction) and low bias (minimization of coefficient reduce the dependency of prediction on a particular variable).
+#Limitation of Ridge Regression: 
+Ridge regression decreases the complexity of a model but does not reduce the number of variables since it never leads to a coefficient been zero rather only minimizes it. Hence, this model is not good for feature reduction.
+#Lasso Regression :
+Lasso regression stands for Least Absolute Shrinkage and Selection Operator. It adds penalty term to the cost function. This term is the absolute sum of the coefficients. As the value of coefficients increases from 0 this term penalizes, cause model, to decrease the value of coefficients in order to reduce loss. The difference between ridge and lasso regression is that it tends to make coefficients to absolute zero as compared to Ridge which never sets the value of coefficient to absolute zero.
+#Limitation of Lasso Regression:
+Lasso sometimes struggles with some types of data. If the number of predictors (p) is greater than the number of observations (n), Lasso will pick at most n predictors as non-zero, even if all predictors are relevant (or may be used in the test set).
+If there are two or more highly collinear variables then LASSO regression select one of them randomly which is not good for the interpretation of data.
+#Elastic Net :
+Sometimes, the lasso regression can cause a small bias in the model where the prediction is too dependent upon a particular variable. In these cases, elastic Net is proved to better it combines the regularization of both lasso and Ridge. The advantage of that it does not easily eliminate the high collinearity coefficient
+
+
+
+######################################################################################################################################################
+
+# Prepare data
+```{r}
+set.seed(557)
+x_train = Train_Data[,-9]
+y_train = Train_Data[,9]
+x_test = Test_Data[,-9]
+y_test = Test_Data[,9]
+```
+
+# Start by the Ridge Regression, use CV with default value of k=10 to find the best alpha
+
+```{r}
+alpha0.fit <- cv.glmnet(as.matrix(x_train),y_train,type.measure = "mse", alpha = 0, family = "gaussian")
+alpah0.predicted <- predict(alpha0.fit, s = alpha0.fit$lambda.1se, newx = as.matrix(x_test))
+mean((y_test - alpah0.predicted)^2)
+plot(alpha0.fit)
+```
+
+# Repeat the same for Lasso Regression
+```{r}
+alpha1.fit <- cv.glmnet(as.matrix(x_train), y_train, type.measure = "mse", alpha = 1, family= "gaussian")
+alpha1.predict <- predict(alpha1.fit, s = alpha1.fit$lambda.1se, newx = as.matrix(x_test))
+mean((y_test - alpha1.predict)^2)
+plot(alpha1.fit)
+```
+
+# Repeat for Elastic-Net
+```{r}
+alpha0.5.fit <- cv.glmnet(as.matrix(x_train), y_train, type.measure = "mse", alpha = 0.5, family= "gaussian")
+alpha0.5.predict <- predict(alpha0.5.fit, s = alpha1.fit$lambda.1se, newx = as.matrix(x_test))
+mean((y_test - alpha0.5.predict)^2)
+```
+# Comments: 
+Elastic-Net performed the best, as the MSE obtained by Elastic Net is smaller than that obtain by both the Ridge and Lasso Regression models.
+
+#Reference: 
+1.
+https://www.geeksforgeeks.org/lasso-vs-ridge-vs-elastic-net-ml/#:~:text=The%20difference%20between%20ridge%20and,with%20some%20types%20of%20data.
+2.
+https://www.youtube.com/watch?v=ctmNq7FgbvI&t=1048s 
+
+#####################################################################################################################################################
+
+# Best subset Selection
+
+Best subset selection is a method that aims to find the subset of independent variables (Xi) that best predict the outcome (Y) and it does so by considering all possible combinations of independent variables.
+
+
+
+# Apply Best subset selection to choose the best features and get the mse.
+```{r}
+regfit.full = regsubsets(median_house_value ~ . , data = Train_Data, nvmax = 9)
+reg.summary <- summary(regfit.full)
+reg.summary$bic
+which.min(reg.summary$bic)
+which.max(reg.summary$rsq)
+plot(reg.summary$bic,xlab = "number of variables", ylab = "bic", type = "l")
+points(8,reg.summary$bic[8], col = "red", cex = 2, pch = 20)
+plot(reg.summary$rsq,xlab = "number of variables", ylab = "bic", type = "l")
+points(9,reg.summary$rsq[9], col = "red", cex = 2, pch = 20)
+coef(regfit.full, 6 )
+
+```
+
+
+# Comments
+Choosing 6 parameters would be enough, which are longitude,latitude ,housing_median_age , total_bedrooms,population and median_income. 
+
+# Next, let us try to fit a linear model with least sqaure error fitting procedure
+
+# with these chosen 6 parameters and save the results
+```{r}
+model.fit <- lm(median_house_value ~ longitude + latitude +housing_median_age + total_bedrooms + population + median_income  , data = Train_Data)
+sm1 <- summary(model.fit)
+sm1
+```
+# Comments
+As expecting, the 6 features have high statistical importance, due to their very low P values
+Adjusted  R-squared is relatively good, i.e, our model was only able to capture 63.24% of the variance.
+
+# Test the model on the test_data
+```{r}
+mse_test   <- mean(( Test_Data$median_house_value- predict.lm(model.fit,Test_Data))^2) #
+mse_test
+```
+# Reference:
+3.
+https://quantifyinghealth.com/best-subset-selection/
+4.
+https://www.youtube.com/watch?v=HkpECgfs_Pk&t=977s 
+
+######################################################################################################################################################
+
+
+# Principle Component Regression (PCR) Vs. Partial Least Square Regression (PLSR)
+
+# PCR: 
+A Dimension reduction technique that combines features instead of using the same features, to better explain the variation in our target variable
+In other words, PCR uses a linear combination of features instead of the original ones for fitting the model. We will use CV to select the number of PCR. One major weakness of PCR is that it doesn't consider the target variable while constructing the PCR's.
+
+```{r}
+set.seed(557)
+fit_pcr <- pcr(median_house_value ~., data = Train_Data, validation = "CV")
+sm2 <- summary(fit_pcr)
+validationplot(fit_pcr, val.type = "RMSEP")
+```
+
+
+# Comments:
+The dimension stayed more or less the same. 7 PCR is suggested to be used in this model.
+
+# Calculate the MSE
+```{r}
+pcr.pred <- predict(fit_pcr, Test_Data, ncomp=7)
+mean((pcr.pred -Test_Data$median_house_value )^2)
+```
+
+# Apply Partial Least Sqaure Regression
+PLSR is another dimension reduction technique, that is similar to PCR, but it solves the weakness of PCR. PLSR gives important to target variable while constructing the new composite features.
+
+```{r}
+set.seed(557)
+fit.pls <- plsr(median_house_value ~., data = Train_Data, validation = "CV")
+sm3 <- summary(fit.pls)
+validationplot(fit.pls)
+pls.pred <- predict(fit.pls, Test_Data, ncomp=7)
+mean((pls.pred -Test_Data$median_house_value )^2)
+```
+# Comments:
+Since PLS took into consideration the target variable, which is in our case is the median_house_value, it comes with no surprise that the MSE is better in this case.
+
+# References:
+5.
+https://www.youtube.com/watch?v=cSeMy8xJvNA&t=424s&ab_channel=AnalyticsUniversity
+6.
+https://www.youtube.com/watch?v=MrtPbruYbWY&list=PLUgZaFoyJafgYrEycCrpnB008E9mxxli5&index=23&ab_channel=AnalyticsUniversity 
+
+######################################################################################################################################################
+
+# Generalized Additive Models
+A power non-linear model that incorporate multiple features at once, giving each of them, a model at its own.
+
+A missing point here is the method to follow to choose the models to fit for each feature. But for the sake of testing as many models as possible, let's experiment with the following
+
+```{r}
+
+gam3=lm(median_house_value~ ns(total_bedrooms,4)+poly(median_income,5)+longitude,data=Train_Data)
+summary(gam3)
+par(mfrow=c(1,3))
+plot(gam3, se=TRUE,col="blue")
+```
+
+# Comments
+Based on the summary of the model, one can conclude that a spline of degree 2 is enough, (based on the P value), to capture the relationship between the total_bedrooms and the response,  and a polynomial of degree 3 is again enough for capturing the relationship between the median_income and the response. We also notice a high statistical relationship in the linear relation between the response and the longitude.
+
+
+# Predict
+```{r}
+
+preds=predict(gam3,newdata=Test_Data)
+
+mean((Test_Data$median_house_value - preds)^2)
+```
+
+
+##############################################################################################################################################
+
+# Decision Trees
+
+# Fit a regression
+
+A regression tree is built through a process known as binary recursive partitioning, which is an iterative process that splits the data into partitions or branches, and then continues splitting each partition into smaller groups as the method moves up each branch.
+
+# Reference:
+1.
+https://www.solver.com/regression-trees#:~:text=A%20regression%20tree%20is%20built,method%20moves%20up%20each%20branch.
+2.
+https://www.youtube.com/watch?v=MoBw5PiW56k 
+
+# Let us first fit a regression tree without cross validation
+
+```{r}
+set.seed(557)
+train = sample(1:nrow(mydata),nrow(mydata)*0.8)
+treemodel <- tree(mydata$median_house_value ~., data = mydata, subset = train)
+treemodel
+
+```
+
+
+# Comments
+As we can observe, the tree was splitted based on the median_income, which is considered to be the most
+predictive feature out of the 9 features.
+
+# Lets plot the tree
+
+```{r}
+plot(treemodel)
+text (treemodel, pretty = 1)
+title ( main = "Unpruned Regression tree")
+```
+
+# Let us test this model
+```{r}
+yhat <- predict(treemodel, newdata = mydata[-train,])
+mydata_test <- mydata[-train, "median_house_value"]
+mean((yhat - mydata_test)^2)
+```
+
+# Comments:
+The results are not very good, perhaps, because the tree's main problem is overfitting. Let's try to find the best number of features to use, using CV, default k =10 value, and prune the tree a bit.
+
+# Let us use Cross validation to find the best tree
+```{r}
+set.seed(557)
+cv_tree <- cv.tree(treemodel)
+plot(cv_tree$size,cv_tree$dev,type = "b")
+```  
+# comments
+As we can observe, we can perhaps choose 8 features, instead of 10 and try to prune the tree
+
+# Tree Prunning
+```{r}
+prune_treemodel <- prune.tree(treemodel, best = 8)
+yhat_pruned <- predict(prune_treemodel, newdata = mydata[-train,])
+mydata_test_pruned <- mydata[-train, "median_house_value"]
+mean((yhat_pruned - mydata_test_pruned)^2)
+```
+
+
+# Comments
+It seems like pruning the regression tree didn't improve the results.
+This could be explained by overfitting, since our tree is trying to memorize the data. A solution to this problem is random forest trees, that uses fewer number of features, usually square root of number of features, which is square root of 9, which is 3. So the random forest will choose 3 features which will be chosen such that they are not correlated, but independent. In other words, random forest tree will choose a subset of variable, to avoid overfitting the model, fit a number of trees and then average them.
+
+# Random Forest 
+```{r}
+set.seed(557)
+forest_tree <- randomForest(median_house_value ~., data= mydata, subset = train ,mtry = 3, importance = TRUE)
+yhat_forest <- predict(forest_tree, newdata = mydata[-train,])
+mydata_test_forest <- mydata[-train, "median_house_value"]
+mean((yhat_forest - mydata_test_forest)^2) #2403801470
+
+forest_tree
+```
+
+# Comments
+Using three factors only well chosen using random forest, and after about 8 minutes running the last cell, we got the best results in terms of MSE, compared to all previous results. As shown, random forest fitted a 500 trees,  with a percentage of variance explained by our model reached up tp 82.4 %.
+If one can have access to a high computational power machine, we can try to fit multiple random forests, and check for the ntree that gives the best results to choose.
+
+#
+
+# Lets check the features that were chosen by the random forest 
+```{r}
+varImpPlot(forest_tree)
+```
+
+# comments
+We can see the median_income was again chosen to be the best feature, followed by housing median age and longitude.
+
+# Finally, lets test the a boosting algorithm
+Here instead of fitting multiple trees, and taking the average to reduce the variance, as the forest tree did, boosting aims at fitting smaller trees to reduce the bais, and applies ensemble method on them. Lets tree boosting with 10000 trees.
+
+# Reference:
+https://www.youtube.com/watch?v=MpDEU96Ss8E&list=PL5-da3qGB5IB23TLuA8ZgVGC8hV8ZAdGh&index=7&ab_channel=DataScienceAnalytics
+
+
+```{r}
+set.seed(557)
+boost_tree <- gbm(median_house_value ~., data = mydata[train,],distribution = "gaussian", n.trees = 5000, interaction.depth = 3 )
+yhat_boost_tree <- predict (boost_tree, newdata =mydata[-train,],ntrees = 5000)
+mean((yhat_boost_tree - mydata[-train,]$median_house_value)^2) # 2189184209
+
+```
+# Comments
+We even get better results, compared to the random forest tree.
+
+Next, lets check the summary and plot the features importance.
+
+```{r}
+require(gbm)
+summary(boost_tree)
+plot(boost_tree, i = "lstat")
+```
+
+# Comments:
+A different set of top features was chosen by the boosting algorithm.
+
+#################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################
+
+# PART II: Classification on binary response
+
+# Step I: Build the problem question
+
+```{r}
+hist(mydata$median_house_value)
+```
+
+Based on the histogram of the median house values, we could form our alternative problem as classifying whether median house value will be more than or less than 2.5e+0.5 dollar.
+Add the variable high as a feature to our data frame, and start applying different classification algorithms on the new data set, to classify whether the median house value will be more than or less than 
+2.5e+0.5 dollar.
+
+```{r}
+high <- ifelse(mydata$median_house_value <= 2.5e+05, "No", "Yes")
+new_data <- data.frame(mydata, high)
+new_data <- new_data[,-9]
+new_split <- sample.split(new_data$high, SplitRatio = 0.8)
+new_Train_Data <- subset(new_data, new_split == TRUE)
+new_Test_Data  <- subset(new_data, new_split == FALSE)
+```
+
+
+# Step II: Start applying classification algorithms
+
+1. Logistic Regression
+2. Discriminant Analysis
+3. K-NN
+5. Decision Trees
+
+##############################################################################################################################################
+
+1. Logistic Regression 
+Logistic regression is a calculation used to predict a binary outcome: either something happens, or does not.
+Independent variables are analyzed to determine the binary outcome with the results falling into one of two categories. The independent variables can be categorical or numeric, but the dependent variable is always categorical.
+# Reference: 
+https://monkeylearn.com/blog/classification-algorithms/
+
+# Logistic Regression
+```{r}
+set.seed(557)
+model1 <- glm(factor(high) ~. , data = new_Train_Data, family = binomial)
+pred.prob_1 = predict(model1, newdata = new_Test_Data, type = 'response')
+pred.classes_1 = ifelse(pred.prob_1 > 0.5,1,0)
+table(pred.classes_1, new_Test_Data$high)
+```
+
+# Comments
+Accuracy = 86.54 % 
+
+# Discrimiant Analysis : LDA and QDA
+
+Linear discriminant function analysis (i.e., discriminant analysis) performs a multivariate test of differences between groups. In addition, discriminant analysis is used to determine the minimum number of dimensions needed to describe these differences.
+LDA focuses on finding a feature subspace that maximizes the separability between the groups.
+
+Quadratic Discriminant Analysis (QDA) is a generative model. QDA assumes that each class follow a Gaussian distribution. The class-specific prior is simply the proportion of data points that belong to the class. The class-specific mean vector is the average of the input variables that belong to the class.
+
+
+
+Reference
+1.
+https://stats.oarc.ucla.edu/stata/dae/discriminant-function-analysis/ 
+2.
+https://towardsdatascience.com/quadratic-discriminant-analysis-ae55d8a8148a#:~:text=Quadratic%20Discriminant%20Analysis%20(QDA)%20is,that%20belong%20to%20the%20class.
+
+# LDA
+```{r}
+set.seed(557)
+model2 <- lda(factor(high) ~. , data = new_Train_Data)
+pred.prob_2 = predict(model2, data = new_Train_Data)$class
+table(Predicted_2 , high = new_Train_Data$high)
+```
+
+
+# QDA
+```{r}
+set.seed(557)
+model3 = qda(factor(high) ~. , data = new_Train_Data)
+pred.prob.3 = predict(model3, newdata=new_Test_Data)
+confusionMatrix(table(Predicted = pred.prob.3$class, high = new_Test_Data$high))
+```
+
+
+# comments:
+
+Accuracy_LDA =  86.57 %
+Accuracy_QDA =  83.33 %
+
+
+# KNN Classifier
+The abbreviation KNN stands for “K-Nearest Neighbour”. It is a supervised machine learning algorithm. The algorithm can be used to solve both classification and regression problem statements. The number of nearest neighbours to a new unknown variable that has to be predicted or classified is denoted by the symbol 'K'.
+Reference:
+
+https://www.analyticsvidhya.com/blog/2021/05/knn-the-distance-based-machine-learning-algorithm/
+
+```{r}
+set.seed(577)
+knn.model2 <- knn3(factor(high) ~. , data = new_Train_Data, k = 4)
+knn.probs <- predict(knn.model2, newdata = new_Test_Data)
+par(mfrow=c(1,1))
+knn.classes <- as.numeric (knn.probs[,2] > 0.5)
+table(knn.classes, factor(new_Test_Data$high))
+```
+
+# Comments
+Accuracy_KNN = 76.36 %
+
+
+
+# Decsion Trees: Classification Trees
+A classification tree is a structural mapping of binary decisions that lead to a decision about the class (interpretation) of an object (such as a pixel). Although sometimes referred to as a decision tree, it is more properly a type of decision tree that leads to categorical decisions.
+Reference: 
+https://clarklabs.org/classification-tree-analysis/#:~:text=A%20classification%20tree%20is%20a,that%20leads%20to%20categorical%20decisions.
+
+# Classification Tree
+```{r}
+new_Train_Data$high <- as.factor(new_Train_Data$high)
+
+model_classification_tree <- tree(high ~ ., data = new_Train_Data)
+plot(model_classification_tree)
+text(model_classification_tree, pretty = 0)
+model_classification_tree
+
+```
+
+# Comments:
+similar to the regression tree, the classification tree also chose the median_income to be the first splitting feature for its importance.
+
+# Apply Prediction fucntion
+```{r}
+classification_tree_pred <- predict(model_classification_tree, new_Test_Data, type = "class" )
+with(new_Test_Data,table(classification_tree_pred,high))
+```
+
+# comments
+Accuracy_classification_tree_before_CV = 84.92 %
+Let's apply CV to better know the number of features to use and prune the tree.
+
+```{r}
+cv.classification.tree <-cv.tree(model_classification_tree, FUN=prune.misclass)
+cv.classification.tree
+plot(cv.classification.tree)
+prune.tree <- prune.misclass(model_classification_tree, best = 8)
+plot(prune.tree); text(prune.tree, pretty = 0)
+```
+
+# comments
+Applying Cross valediction we figure out that the best tree contains around 8 features
+so, we prune the tree, and plot it again. Next, lets test this pruned tree.
+
+```{r}
+
+pruned_tree_pred <- predict(prune.tree, new_Test_Data, type = "class" )
+with(new_Test_Data,table(pruned_tree_pred,high))
+```
+
+# Comments
+Accuracy for the pruned tree increased a bit to 84.63 %, 
+what we got was a shallow tree that is easier to understand.
+
